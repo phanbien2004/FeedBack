@@ -13,7 +13,7 @@ public class OpenAPIConfig {
     @Bean
     public OpenAPI customOpenAPI() {
         Server server = new Server();
-        server.setUrl("http://localhost:8080");
+        server.setUrl("http://100.103.11.94:8080");
         server.setDescription("API Documentation");
 
         Info info = new Info();

@@ -10,10 +10,7 @@ import com.example.backend.service.AccountService;
 import lombok.AllArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
-
-import java.security.Principal;
 
 @RestController
 @RequestMapping("/account")
@@ -28,7 +25,6 @@ public class AccountCtr {
     public AccountDTO getProfile(Authentication authentication){
         String username = authentication.getName();
         Account account = accountRepo.findByUsername(username);
-        System.out.println(account);
         return accountMapper.accountToDto(account);
     }
 
