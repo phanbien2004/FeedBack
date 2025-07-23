@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: backend
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/feedback
+    username: root
+    password: Duyanh090@
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+  security:
+    user:
+      name: admin
+      password: 123
+
+server:
+  servlet:
+    session:
+      cookie:
+        same-site: strict
+      timeout: 30m
