@@ -1,30 +1,39 @@
 package com.example.backend.service.implement;
 
 import com.example.backend.Enum.Role;
+import com.example.backend.dto.AccountDTO;
 import com.example.backend.dto.payload.LoginDTO;
 import com.example.backend.dto.payload.RegisterDTO;
 import com.example.backend.entity.Account;
 import com.example.backend.mapper.AccountMapper;
 import com.example.backend.repository.AccountRepository;
 import com.example.backend.service.AccountService;
+import lombok.AllArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
+@AllArgsConstructor
 public class AccountServiceImp implements AccountService {
 
-    @Autowired
-    private AccountMapper accountMapper;
-    @Autowired
-    private AccountRepository accountRepo;
-    @Autowired
-    private AuthenticationManager authenticationManager;
+    private final AccountRepository accountRepo;
+    private final AccountMapper accountMapper;
+    private final AuthenticationManager authenticationManager;
 
     @Override
-    public String login(LoginDTO detail) {
+    public Account getCurrentAccount() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication.getName();
+        return accountRepo.findByUsername(username);
+    }
+
+    @Override
+    public AccountDTO login(LoginDTO detail) {
         Account account = accountRepo.findByUsername(detail.getUsername());
         if(account == null){
             throw new RuntimeException("Data not found");
@@ -34,7 +43,7 @@ public class AccountServiceImp implements AccountService {
         }catch(Exception e){
             throw new RuntimeException("Wrong Password");
         }
-        return "Login successful";
+        return accountMapper.accountToDto(account);
     }
 
     @Override

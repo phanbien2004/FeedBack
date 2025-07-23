@@ -1,10 +1,12 @@
 package com.example.backend.service;
 
-import com.example.backend.Enum.Role;
+import com.example.backend.dto.AccountDTO;
 import com.example.backend.dto.payload.LoginDTO;
 import com.example.backend.dto.payload.RegisterDTO;
+import com.example.backend.entity.Account;
 
 public interface AccountService {
-    String login(LoginDTO detail);
+    Account getCurrentAccount();
+    AccountDTO login(LoginDTO detail);
     String register(RegisterDTO detail);
 }

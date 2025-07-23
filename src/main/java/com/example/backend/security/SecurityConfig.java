@@ -1,8 +1,10 @@
 package com.example.backend.security;
 
-import com.example.backend.config.CustomAuthenticationSuccessHandler;
+import com.example.backend.config.CustomLogoutHandler;
+import lombok.AllArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -13,23 +15,15 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
-import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@AllArgsConstructor
 public class SecurityConfig {
 
-    private final CorsConfigurationSource corsConfigurationSource;
     private final UserDetailsService userDetailsService;
+    private final CustomLogoutHandler customLogoutHandler;
 
-    public SecurityConfig(CorsConfigurationSource corsConfigurationSource, UserDetailsService userDetailsService) {
-        this.corsConfigurationSource = corsConfigurationSource;
-        this.userDetailsService = userDetailsService;
-    }
 
     @Bean
     public AuthenticationProvider authenticationProvider() {
@@ -40,13 +34,15 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain configure(HttpSecurity http, CustomAuthenticationSuccessHandler successHandler) throws Exception {
+    public SecurityFilterChain configure(HttpSecurity http) throws Exception {
         return http
-                .cors(customizer -> customizer.configurationSource(corsConfigurationSource))
+                .cors(AbstractHttpConfigurer::disable)
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(
                         requests -> requests
+                                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                                 .requestMatchers(
+                                        "/account/registration",
                                         "/account/login",
                                         "/swagger-ui.html",
                                         "/swagger-ui/**",
@@ -57,10 +53,9 @@ public class SecurityConfig {
                                 .permitAll()
                                 .anyRequest()
                                 .authenticated())
-                .formLogin(customizer ->
-                        customizer
-                                .loginPage("http://100.102.90.90:5173/login")
-                                .successHandler(successHandler)
+                .logout(customLogout -> customLogout
+                        .logoutUrl("/logout")
+                        .addLogoutHandler(customLogoutHandler)
                 )
                 .sessionManagement(session -> session.
                         maximumSessions(1)
@@ -71,16 +66,5 @@ public class SecurityConfig {
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
-    }
-
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration corsConfiguration = new CorsConfiguration();
-        corsConfiguration.setAllowedOrigins(List.of("http://100.103.11.94:8080", "http://localhost:8080"));
-        corsConfiguration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE"));
-        corsConfiguration.setAllowedHeaders(List.of("Content-Type"));
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", corsConfiguration);
-        return source;
     }
 }

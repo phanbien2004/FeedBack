@@ -18,11 +18,5 @@ public class Account {
     private short sos;
 
     @OneToMany(mappedBy = "account", orphanRemoval = true, cascade = CascadeType.ALL)
-    private List<Rating> ratings;
-
-    @OneToMany(mappedBy = "account", orphanRemoval = true, cascade = CascadeType.ALL)
     private List<Feedback> feedbacks;
-
-    @OneToMany(mappedBy = "account", orphanRemoval = true, cascade = CascadeType.ALL)
-    private List<Response> responses;
 }
