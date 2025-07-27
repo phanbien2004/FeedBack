@@ -1,20 +1,43 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CiUser } from "react-icons/ci";
+import { login } from "../services/Login";
 
 function LoginPage() {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (email && password) {
-      console.log("Đăng nhập thành công:", { email, password });
-      navigate("/student");
-    } else {
-      alert("Vui lòng nhập đầy đủ email và mật khẩu.");
+    try {
+      const response = await login(username, password);
+      if (!response?.role) {
+        alert(
+          "Thông tin tài khoản hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại!"
+        );
+        return;
+      }
+      sessionStorage.setItem("role", response.role);
+      sessionStorage.setItem("username", response?.username);
+      sessionStorage.setItem("id", response.id);
+      if (response?.role === "STUDENT") {
+        sessionStorage.setItem("sos", response?.sos);
+        navigate("/student");
+      } else if (response?.role === "DEPARTMENT") {
+        navigate("/department");
+      } else if (response?.role === "EXECUTIVE") {
+        navigate("/management");
+      } else {
+        alert(
+          "Thông tin tài khoản hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại!"
+        );
+      }
+    } catch (error) {
+      console.log("Error in Login: ", error);
+      alert(
+        "Thông tin tài khoản hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại!"
+      );
     }
   };
 
@@ -26,10 +49,9 @@ function LoginPage() {
       </div>
       <form onSubmit={handleSubmit} style={styles.form}>
         <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Tên đăng nhập"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
           style={styles.input}
         />
         <input

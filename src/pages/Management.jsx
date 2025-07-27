@@ -1,228 +1,378 @@
-import { useMemo, useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { managementGetFeedBack, responseFeedBack } from "../services/FeedBack";
+import { logout } from "../services/Login";
 
-export default function ManagementPage() {
-  const [selectedCategory, setSelectedCategory] = useState("Tất cả");
-  const [selectedReplyStatus, setSelectedReplyStatus] = useState("Tất cả");
+export default function Management() {
+  const [feedbacks, setFeedbacks] = useState([]);
+  const [selectedFeedback, setSelectedFeedback] = useState(null);
+  const [replyMessage, setReplyMessage] = useState("");
 
-  const [feedbacks] = useState([
-    {
-      id: 1,
-      category: "Học vụ",
-      content: "Lịch học không rõ ràng.",
-      email: "sv1@example.com",
-      replied: true,
-      feedbackTime: "2025-07-19 09:00",
-      replyTime: "2025-07-20 08:00",
-    },
-    {
-      id: 2,
-      category: "Cơ sở vật chất",
-      content: "Phòng học nóng quá.",
-      email: "sv2@example.com",
-      replied: false,
-      feedbackTime: "2025-07-10 10:30",
-    },
-    {
-      id: 3,
-      category: "Học phí",
-      content: "Học phí tăng nhiều.",
-      email: "sv3@example.com",
-      replied: true,
-      feedbackTime: "2025-07-17 14:20",
-      replyTime: "2025-07-18 09:45",
-    },
-    {
-      id: 4,
-      category: "Hỗ trợ ra trường",
-      content: "Cần tư vấn việc làm.",
-      email: "sv4@example.com",
-      replied: false,
-      feedbackTime: "2025-07-12 16:50",
-    },
-    {
-      id: 5,
-      category: "Học vụ",
-      content: "Cần thêm buổi học phụ đạo.",
-      email: "sv5@example.com",
-      replied: false,
-      feedbackTime: "2025-07-19 11:15",
-    },
-  ]);
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterType, setFilterType] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
-  const today = new Date();
+  const navigate = useNavigate();
 
-  const stats = useMemo(() => {
-    const total = feedbacks.length;
-    const replied = feedbacks.filter((f) => f.replied).length;
-    const notReplied = total - replied;
-    const replyRate = total === 0 ? 0 : Math.round((replied / total) * 100);
+  useEffect(() => {
+    if (sessionStorage.getItem("role") !== "EXECUTIVE") {
+      alert("Bạn cần phải đăng nhập!");
+      navigate("/login");
+    }
+  }, []);
 
-    const categoryStats = feedbacks.reduce((acc, fb) => {
-      acc[fb.category] = (acc[fb.category] || 0) + 1;
-      return acc;
-    }, {});
+  useEffect(() => {
+    managementGetFeedBack("", "", "sendTime_desc", "").then((res) => {
+      console.log(res);
+      setFeedbacks(res || []);
+    });
+  }, []);
 
-    return { total, replied, notReplied, replyRate, categoryStats };
-  }, [feedbacks]);
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login");
+  };
+
+  const handleSendReply = async () => {
+    if (!replyMessage.trim()) {
+      alert("Vui lòng nhập nội dung phản hồi.");
+      return;
+    }
+
+    try {
+      const response = await responseFeedBack(
+        selectedFeedback.id,
+        replyMessage
+      );
+      console.log(response);
+      alert(
+        `Phản hồi đã được gửi tới Sinh viên ${selectedFeedback.senderCode}:\n\n${replyMessage}`
+      );
+
+      setFeedbacks((prev) =>
+        prev.map((fb) =>
+          fb.id === selectedFeedback.id ? { ...fb, status: "Đã phản hồi" } : fb
+        )
+      );
+
+      setSelectedFeedback(null);
+      setReplyMessage("");
+    } catch (error) {
+      console.log("Error in sendFeedBack!", error);
+    }
+  };
+
+  const parseCreatedAt = (str) => {
+    const [time, date] = str.split(", ");
+    const [hour, minute] = time.split(":").map(Number);
+    const [day, month, year] = date.split("/").map(Number);
+    return new Date(year, month - 1, day, hour, minute);
+  };
 
   const filteredFeedbacks = feedbacks.filter((fb) => {
+    const fbDate = parseCreatedAt(fb.createdAt);
+    const matchType = filterType === "all" || fb.type === filterType;
+    const matchStatus = filterStatus === "all" || fb.status === filterStatus;
     const matchCategory =
-      selectedCategory === "Tất cả" || fb.category === selectedCategory;
-    const matchReply =
-      selectedReplyStatus === "Tất cả" ||
-      (selectedReplyStatus === "Đã phản hồi" && fb.replied) ||
-      (selectedReplyStatus === "Chưa phản hồi" && !fb.replied);
-    return matchCategory && matchReply;
+      filterCategory === "all" || fb.category === filterCategory;
+    const matchDate =
+      (!startDate || fbDate >= new Date(startDate)) &&
+      (!endDate || fbDate <= new Date(endDate + "T23:59:59"));
+    return matchType && matchStatus && matchCategory && matchDate;
   });
 
-  const isOverdue = (feedbackTime) => {
-    const sent = new Date(feedbackTime);
-    const due = new Date(sent);
-    due.setDate(due.getDate() + 7);
-    return today > due;
-  };
+  const formatDate = (str) => str || "";
 
-  const getOverdueDays = (feedbackTime) => {
-    const sent = new Date(feedbackTime);
-    const overdueMs = today - sent - 7 * 24 * 60 * 60 * 1000;
-    return Math.floor(overdueMs / (1000 * 60 * 60 * 24));
-  };
+  // Thống kê
+  const total = filteredFeedbacks.length;
+  const categoryCounts = filteredFeedbacks.reduce((acc, fb) => {
+    acc[fb.category] = (acc[fb.category] || 0) + 1;
+    return acc;
+  }, {});
+  const replied = filteredFeedbacks.filter(
+    (fb) => fb.status === "Đã phản hồi"
+  ).length;
+  const pending = filteredFeedbacks.filter(
+    (fb) => fb.status === "Đang xử lý"
+  ).length;
+  const overdue = filteredFeedbacks.filter(
+    (fb) => fb.status === "Quá hạn"
+  ).length;
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.header}>Quản lý phản hồi sinh viên</h2>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 20,
+        }}
+      >
+        <h2 style={styles.title}>Phản hồi từ sinh viên</h2>
+        <button onClick={handleLogout} style={styles.logoutButton}>
+          Đăng xuất
+        </button>
+      </div>
 
-      <div style={styles.summary}>
+      {/* Bộ lọc */}
+      <div
+        style={{ marginBottom: 20, display: "flex", flexWrap: "wrap", gap: 12 }}
+      >
+        <select
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value)}
+        >
+          <option value="all">Tất cả chủ đề</option>
+          <option value="Học vụ">Học vụ</option>
+          <option value="Cơ sở vật chất">Cơ sở vật chất</option>
+          <option value="Học phí">Học phí</option>
+          <option value="Hỗ trợ ra trường">Hỗ trợ ra trường</option>
+        </select>
+
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+        >
+          <option value="all">Tất cả trạng thái</option>
+          <option value="Đã phản hồi">Đã phản hồi</option>
+          <option value="Đang xử lý">Chưa phản hồi</option>
+          <option value="Quá hạn">Quá hạn</option>
+        </select>
+
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+        >
+          <option value="all">Tất cả loại</option>
+          <option value="Đặc biệt">SOS</option>
+          <option value="Thông thường">Thường</option>
+        </select>
+
         <div>
-          Tổng phản hồi: <strong>{stats.total}</strong>
+          <label>Từ ngày: </label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
         </div>
+
         <div>
-          Đã phản hồi: <strong>{stats.replied}</strong>
-        </div>
-        <div>
-          Chưa phản hồi: <strong>{stats.notReplied}</strong>
-        </div>
-        <div>
-          Tỷ lệ phản hồi: <strong>{stats.replyRate}%</strong>
+          <label>Đến ngày: </label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+          />
         </div>
       </div>
 
-      <div style={styles.filters}>
-        <div>
-          <label>
-            Lọc theo nội dung:&nbsp;
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              style={styles.select}
-            >
-              <option value="Tất cả">Tất cả</option>
-              <option value="Học vụ">Học vụ</option>
-              <option value="Cơ sở vật chất">Cơ sở vật chất</option>
-              <option value="Học phí">Học phí</option>
-              <option value="Hỗ trợ ra trường">Hỗ trợ ra trường</option>
-            </select>
-          </label>
-        </div>
-
-        <div>
-          <label>
-            Lọc theo trạng thái:&nbsp;
-            <select
-              value={selectedReplyStatus}
-              onChange={(e) => setSelectedReplyStatus(e.target.value)}
-              style={styles.select}
-            >
-              <option value="Tất cả">Tất cả</option>
-              <option value="Đã phản hồi">Đã phản hồi</option>
-              <option value="Chưa phản hồi">Chưa phản hồi</option>
-            </select>
-          </label>
-        </div>
+      {/* Thống kê */}
+      <div style={{ marginBottom: 20 }}>
+        <p>
+          <strong>Tổng phản hồi:</strong> {total}
+        </p>
+        {Object.entries(categoryCounts).map(([cat, count]) => (
+          <p key={cat}>
+            <strong>{cat}:</strong> {count}
+          </p>
+        ))}
+        <p>
+          <strong>Đã phản hồi:</strong> {replied}
+        </p>
+        <p>
+          <strong>Chưa phản hồi:</strong> {pending}
+        </p>
+        <p>
+          <strong>Quá hạn (trên 7 ngày):</strong> {overdue}
+        </p>
       </div>
 
-      <div style={styles.feedbackList}>
-        {filteredFeedbacks.length === 0 ? (
-          <p>Không có phản hồi phù hợp với bộ lọc.</p>
-        ) : (
-          filteredFeedbacks.map((fb) => (
-            <div key={fb.id} style={styles.feedbackCard}>
-              <p>
-                <strong>Email:</strong> {fb.email}
-              </p>
-              <p>
-                <strong>Chủ đề:</strong> {fb.category}
-              </p>
-              <p>
-                <strong>Nội dung:</strong> {fb.content}
-              </p>
-              <p>
-                <strong>Thời gian gửi:</strong> {fb.feedbackTime}
-              </p>
-              {fb.replied && (
+      {/* Phản hồi chi tiết */}
+      {selectedFeedback ? (
+        <div style={styles.replyBox}>
+          <h3>Phản hồi đến sinh viên</h3>
+          <p>
+            <strong>Mã sinh viên</strong> {selectedFeedback.senderCode}
+          </p>
+          <p>
+            <strong>Chủ đề:</strong> {selectedFeedback.category}
+          </p>
+          <p>
+            <strong>Nội dung:</strong> {selectedFeedback.content}
+          </p>
+          <textarea
+            style={styles.textarea}
+            placeholder="Nhập phản hồi gửi sinh viên..."
+            value={replyMessage}
+            onChange={(e) => setReplyMessage(e.target.value)}
+          />
+          <button onClick={handleSendReply} style={styles.sendButton}>
+            Gửi phản hồi
+          </button>
+          <button
+            onClick={() => setSelectedFeedback(null)}
+            style={styles.cancelButton}
+          >
+            Hủy
+          </button>
+        </div>
+      ) : (
+        <div style={styles.feedbackList}>
+          {filteredFeedbacks.length === 0 ? (
+            <p>Không có phản hồi nào.</p>
+          ) : (
+            filteredFeedbacks.map((fb) => (
+              <div
+                key={fb.id}
+                style={{
+                  ...styles.feedbackCard,
+                  backgroundColor: fb.type === "Đặc biệt" ? "#ffe5e5" : "white",
+                  borderLeft: fb.type === "Đặc biệt" ? "6px solid red" : "none",
+                }}
+              >
                 <p>
-                  <strong>Thời gian phản hồi:</strong> {fb.replyTime}
+                  <strong>Chủ đề:</strong> {fb.category}
                 </p>
-              )}
-              <p style={{ color: fb.replied ? "green" : "red" }}>
-                <strong>Trạng thái:</strong>{" "}
-                {fb.replied ? "Đã phản hồi" : "Chưa phản hồi"}
-              </p>
-              {!fb.replied && isOverdue(fb.feedbackTime) && (
-                <p style={{ color: "red", fontWeight: "bold" }}>
-                  ⚠️ Quá hạn phản hồi: {getOverdueDays(fb.feedbackTime)} ngày
+                <p>
+                  <strong>Nội dung:</strong> {fb.content}
                 </p>
-              )}
-            </div>
-          ))
-        )}
-      </div>
+                <p>
+                  <strong>Mã sinh viên:</strong> {fb.senderCode}
+                </p>
+                <p>
+                  <strong>Thời gian gửi:</strong> {formatDate(fb.createdAt)}
+                </p>
+                <p>
+                  <strong>Hạn phản hồi:</strong> {formatDate(fb.deadline)}
+                </p>
+                {fb.status === "Đã phản hồi" && (
+                  <>
+                    <p>
+                      <strong>Thời gian phản hồi:</strong>{" "}
+                      {fb.respondedAt || "Chưa rõ"}
+                    </p>
+                    <p>
+                      <strong>Nội dung phản hồi:</strong>{" "}
+                      {fb.respondedContent || "Chưa rõ"}
+                    </p>
+                  </>
+                )}
+                <p>
+                  <strong>Trạng thái:</strong>{" "}
+                  <span
+                    style={{
+                      color:
+                        fb.status === "Đã phản hồi"
+                          ? "green"
+                          : fb.status === "Đang xử lý"
+                          ? "orange"
+                          : "red",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {fb.status === "Đã phản hồi"
+                      ? "Đã phản hồi"
+                      : fb.status === "Đang xử lý"
+                      ? "Đang xử lý"
+                      : "Quá hạn"}
+                  </span>
+                </p>
+                {fb.status !== "Đã phản hồi" && (
+                  <button
+                    onClick={() => setSelectedFeedback(fb)}
+                    style={styles.replyButton}
+                  >
+                    Gửi phản hồi
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 const styles = {
   container: {
-    maxWidth: "1000px",
-    margin: "40px auto",
+    maxWidth: "900px",
+    margin: "60px auto",
     padding: "20px",
     fontFamily: "Segoe UI, sans-serif",
+    backgroundColor: "#f9f9f9",
+    borderRadius: "10px",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
   },
-  header: {
+  title: {
     textAlign: "center",
-    fontSize: "26px",
-    marginBottom: "20px",
-  },
-  summary: {
-    display: "flex",
-    justifyContent: "space-between",
-    backgroundColor: "#f0f0f0",
-    padding: "12px 20px",
-    borderRadius: "8px",
-    fontSize: "16px",
-  },
-  filters: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginTop: "20px",
-    marginBottom: "10px",
-  },
-  select: {
-    padding: "6px 10px",
-    fontSize: "15px",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
+    marginBottom: "30px",
   },
   feedbackList: {
-    marginTop: "20px",
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "20px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
   },
   feedbackCard: {
-    backgroundColor: "#fff",
     padding: "16px",
+    backgroundColor: "white",
     borderRadius: "8px",
     boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
+  },
+  replyButton: {
+    marginTop: "10px",
+    padding: "8px 16px",
+    backgroundColor: "#007bff",
+    color: "white",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+  },
+  replyBox: {
+    padding: "20px",
+    backgroundColor: "#ffffff",
+    borderRadius: "8px",
+    boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+  },
+  textarea: {
+    width: "100%",
+    height: "100px",
+    padding: "10px",
+    marginTop: "10px",
+    borderRadius: "6px",
+    border: "1px solid #ccc",
+    resize: "vertical",
+    outline: "none",
+  },
+  sendButton: {
+    marginTop: "12px",
+    padding: "10px 20px",
+    backgroundColor: "#28a745",
+    color: "white",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    marginRight: "10px",
+  },
+  cancelButton: {
+    marginTop: "12px",
+    padding: "10px 20px",
+    backgroundColor: "#dc3545",
+    color: "white",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+  },
+  logoutButton: {
+    padding: "8px 16px",
+    backgroundColor: "#6c757d",
+    color: "white",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
   },
 };

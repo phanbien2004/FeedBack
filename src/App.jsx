@@ -7,6 +7,7 @@ import ManagementPage from "./pages/Management";
 function App() {
   return (
     <Routes>
+      <Route path="/" element={<LoginPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/student" element={<StudentPage />} />
       <Route path="/department" element={<DepartmentPage />} />

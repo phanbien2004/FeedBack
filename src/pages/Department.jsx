@@ -1,55 +1,64 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { departmentGetFeedBack, responseFeedBack } from "../services/FeedBack";
+import { logout } from "../services/Login";
 
 export default function DepartmentPage() {
-  const [feedbacks, setFeedbacks] = useState([
-    {
-      id: 1,
-      category: "Cơ sở vật chất",
-      content: "Cần sửa máy lạnh phòng A201",
-      email: "sinhvien1@example.com",
-      createdAt: "2025-07-10T10:00:00",
-      replied: false,
-    },
-    {
-      id: 2,
-      category: "Học phí",
-      content: "Mong nhà trường xem xét giảm học phí kỳ này",
-      email: "sinhvien2@example.com",
-      createdAt: "2025-07-05T14:30:00",
-      replied: true,
-    },
-  ]);
+  const [feedbacks, setFeedbacks] = useState([]);
 
   const [selectedFeedback, setSelectedFeedback] = useState(null);
   const [replyMessage, setReplyMessage] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterCategory, setFilterCategpry] = useState("all");
 
-  const handleSendReply = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (sessionStorage.getItem("role") !== "DEPARTMENT") {
+      alert("Bạn cần phải đăng nhập!");
+      navigate("/login");
+    }
+  }, []);
+
+  useEffect(() => {
+    departmentGetFeedBack("", "sendTime_desc", "").then((res) => {
+      console.log(res);
+      setFeedbacks(res);
+    });
+  }, []);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login");
+  };
+
+  const handleSendReply = async () => {
     if (!replyMessage.trim()) {
       alert("Vui lòng nhập nội dung phản hồi.");
       return;
     }
+    try {
+      const response = await responseFeedBack(
+        selectedFeedback.id,
+        replyMessage
+      );
+      console.log(response);
 
-    alert(
-      `Phản hồi đã được gửi tới ${selectedFeedback.email}:\n\n${replyMessage}`
-    );
+      alert(
+        `Phản hồi đã được gửi tới ${selectedFeedback.senderCode}:\n\n${replyMessage}`
+      );
 
-    setFeedbacks((prev) =>
-      prev.map((fb) =>
-        fb.id === selectedFeedback.id ? { ...fb, replied: true } : fb
-      )
-    );
+      setFeedbacks((prev) =>
+        prev.map((fb) =>
+          fb.id === selectedFeedback.id ? { ...fb, status: "Đã phản hồi" } : fb
+        )
+      );
 
-    setSelectedFeedback(null);
-    setReplyMessage("");
-  };
-
-  const formatDate = (iso) => {
-    const date = new Date(iso);
-    return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    })}`;
+      setSelectedFeedback(null);
+      setReplyMessage("");
+    } catch (error) {
+      console.log("Error in handleSendreply", error);
+    }
   };
 
   const getDeadlineDate = (createdAt) => {
@@ -66,12 +75,26 @@ export default function DepartmentPage() {
     filterStatus === "all"
       ? feedbacks
       : feedbacks.filter((fb) =>
-          filterStatus === "replied" ? fb.replied : !fb.replied
+          filterStatus === "replied"
+            ? fb.status === "Đã phản hồi"
+            : fb.status === "Đang xử lý"
         );
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.title}>Phản hồi từ sinh viên</h2>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 20,
+        }}
+      >
+        <h2 style={styles.title}>Phản hồi từ sinh viên</h2>
+        <button onClick={handleLogout} style={styles.logoutButton}>
+          Đăng xuất
+        </button>
+      </div>
 
       {!selectedFeedback && (
         <div style={{ marginBottom: 20 }}>
@@ -121,8 +144,8 @@ export default function DepartmentPage() {
           {filteredFeedbacks.length === 0 ? (
             <p>Không có phản hồi phù hợp.</p>
           ) : (
+            Array.isArray(filteredFeedbacks) &&
             filteredFeedbacks.map((fb) => {
-              const deadline = getDeadlineDate(fb.createdAt);
               return (
                 <div key={fb.id} style={styles.feedbackCard}>
                   <p>
@@ -132,37 +155,46 @@ export default function DepartmentPage() {
                     <strong>Nội dung:</strong> {fb.content}
                   </p>
                   <p>
-                    <strong>Email:</strong> {fb.email}
+                    <strong>Mã sinh viên:</strong> {fb.senderCode}
                   </p>
                   <p>
-                    <strong>Thời gian gửi:</strong> {formatDate(fb.createdAt)}
+                    <strong>Thời gian gửi:</strong> {fb.createdAt}
                   </p>
                   <p>
                     <strong>Hạn phản hồi:</strong>{" "}
                     <span style={{ color: isOverdue(fb) ? "red" : "#333" }}>
-                      {formatDate(deadline.toISOString())}
+                      {fb.deadline}
                     </span>
                   </p>
+                  {fb.status === "Đã phản hồi" && (
+                    <>
+                      <p>
+                        <strong>Thời gian phản hồi:</strong>{" "}
+                        {fb.respondedAt || "Chưa rõ"}
+                      </p>
+                      <p>
+                        <strong>Nội dung phản hồi:</strong>{" "}
+                        {fb.respondedContent || "Chưa rõ"}
+                      </p>
+                    </>
+                  )}
                   <p>
                     <strong>Trạng thái:</strong>{" "}
                     <span
                       style={{
-                        color: fb.replied
-                          ? "green"
-                          : isOverdue(fb)
-                          ? "orange"
-                          : "red",
+                        color:
+                          fb.status === "Đã phản hồi"
+                            ? "green"
+                            : fb.status === "Đang xử lý"
+                            ? "orange"
+                            : "red",
                         fontWeight: "bold",
                       }}
                     >
-                      {fb.replied
-                        ? "Đã phản hồi"
-                        : isOverdue(fb)
-                        ? "Quá hạn chưa phản hồi"
-                        : "Chưa phản hồi"}
+                      {fb.status}
                     </span>
                   </p>
-                  {!fb.replied && (
+                  {fb.status !== "Đã phản hồi" && (
                     <button
                       onClick={() => setSelectedFeedback(fb)}
                       style={styles.replyButton}
